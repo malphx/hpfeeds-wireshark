@@ -1,0 +1,60 @@
+hpfeeds-wireshark README
+
+-== Description ==-
+This is a basic lua dissector for the HPfeeds protocol.
+For more information on the protocol itself, see http://redmine.honeynet.org/projects/hpfeeds/wiki
+
+-== Installation ==-
+Linux:
+	* copy hpfeeds.lua under /usr/share/wireshark (or in the same directory as the init.lua file)
+	* edit wireshark's init.lua file
+		** add the line: dofile("hpfeeds.lua")
+	* restart Wireshark
+
+Windows:
+	* copy hpfeeds.lua under Wireshark's installation directory
+	* edit wireshark's init.lua file
+		** add the line: dofile("hpfeeds.lua")
+	* restart Wireshark
+
+-== Usage ==-
+
+The dissector register itself for TCP port 10000.
+If the broker uses another port, for example TCP port 10001, 
+then you can use "decode as" in the wireshark context menu on a packet.
+
+-== Display Filters ==-
+
+Protocol global filter: 
+	* hpfeeds
+
+Protocol fields filters:
+	* hpfeeds.msglen
+	* hpfeeds.opcode
+	* hpfeeds.server
+	* hpfeeds.nonce
+	* hpfeeds.hash
+	* hpfeeds.ident
+	* hpfeeds.channel
+	* hpfeeds.payload
+
+-== License ==-
+hpfeeds.lua: a basic Wireshark's LUA dissector for the HPfeeds protocol
+Copyright (C) 2012  Franck GUENICHOT
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+
+
