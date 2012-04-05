@@ -37,6 +37,7 @@ Protocol fields filters:
 	* hpfeeds.ident
 	* hpfeeds.channel
 	* hpfeeds.payload
+	* hpfeeds.errmsg
 
 -== License ==-
 hpfeeds.lua: a basic Wireshark's LUA dissector for the HPfeeds protocol
