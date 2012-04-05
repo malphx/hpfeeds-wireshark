@@ -23,91 +23,147 @@ packetnum = -1
 hpfeeds = Proto("hpfeeds","HPfeeds", "HPfeeds Protocol")
 
 -- Protocol Fields
-
 local f = hpfeeds.fields
 local opcodes = { [0] = "Error",[1] = "Info",[2] = "Auth",[3] = "Publish",[4] = "Subscribe"}
-f.msglength = ProtoField.uint32("hpfeeds.msglen", "Message Length")
+f.msglength = ProtoField.uint32("hpfeeds.msglen", "Message length")
 f.opcode = ProtoField.uint8("hpfeeds.opcode", "Opcode", nil, opcodes)
-f.server = ProtoField.string("hpfeeds.server", "Server Name")
+f.server = ProtoField.string("hpfeeds.server", "Broker name")
 f.nonce = ProtoField.bytes("hpfeeds.nonce", "Nonce")
 f.hash = ProtoField.bytes("hpfeeds.hash", "Hash")
 f.ident = ProtoField.string("hpfeeds.ident", "Identifier")
 f.channel = ProtoField.string("hpfeeds.channel", "Channel")
+f.errmsg = ProtoField.string("hpfeeds.errmsg", "Error")
 f.payload = ProtoField.bytes("hpfeeds.payload","Payload")
 
 -- dissector function
 function hpfeeds.dissector(buffer,pinfo,tree)
 		
+	-- Add an HPfeeds Protocol subtree in the decoded pane
 	local subtree = tree:add (hpfeeds, buffer(), "HPfeeds Protocol ("..buffer:len()..")")
-	pinfo.cols.protocol = "HPfeeds"
+	local msg_type
+	--pinfo.cols.protocol = "HPfeeds"
 	
-	-- Packet header
+	-- pktlen stores the actual buffer size
+	local pktlen = buffer:len()
 	local offset = 0
-	local msglen = buffer(offset,4)
-	subtree:add(f.msglength,msglen)
-	offset = offset + 4
-	local opcode = buffer(offset, 1)
-	subtree:add(f.opcode,opcode)
-	offset = offset + 1
+	-- used for TCP reassembly stuff
+	pinfo.desegment_len = 0
 	
-	if (opcode:uint() == 0) then
-		-- Error packet
-		local payload = buffer(offset)
-		subtree:add(f.payload,payload)
-		
-	elseif (opcode:uint() == 1) then
-		-- Info packet
-		local len = buffer(offset, 1)
-		offset = offset + 1
-		local server = buffer(offset, len:uint())
-		subtree:add(f.server,server)
-		offset = offset + len:uint()
-		local nonce = buffer(offset,4)
-		subtree:add(f.nonce,nonce)
+	-- whole HPfeeds message size
+	-- some message cannot fit in a single packet
+	-- we need to know the message size to as wireshark to do reassembly
+	local msg_len
+	
+	-- Stores the offset of the starting point of a message
+	-- it's used when messages are stacked in the same packet
+	-- for example, multiple channels subscription in a single subscribe packet
+	local msg_start
+	
+	-- main dissection loop
+	while offset < pktlen do
+		-- if offset is less than pktlen, then we have stacked messages
+		msg_start = offset	
+		-- Packet header
+		msg_len = buffer(offset,4)
 		offset = offset + 4
-	
-	elseif (opcode:uint() == 2) then
-		-- Auth packet
-		local len = buffer(offset, 1)
+		local opcode = buffer(offset, 1)
 		offset = offset + 1
-		local ident = buffer(offset, len:uint())
-		subtree:add(f.ident,ident)
-		offset = offset + len:uint()
-		local hash = buffer(offset)
-		subtree:add(f.hash,hash)		
 		
-	elseif (opcode:uint() == 3) then
-		-- Publish packet
-		local len = buffer(offset, 1)
-		offset = offset + 1
-		local ident = buffer(offset, len:uint())
-		subtree:add(f.ident,ident)
-		offset = offset + len:uint()
-		len = buffer(offset, 1)
-		offset = offset + 1
-		local channel = buffer(offset, len:uint())
-		subtree:add(f.channel,channel)
-		offset = offset + len:uint()
-		local payload = buffer(offset)
-		subtree:add(f.payload,payload)
-
-	elseif (opcode:uint() == 4) then
-		-- Subscribe packet
-		local len = buffer(offset, 1)
-		offset = offset + 1
-		local ident = buffer(offset, len:uint())
-		subtree:add(f.ident,ident)
-		offset = offset + len:uint()
-		len = buffer(offset, 1)
-		offset = offset + 1
-		local channel = buffer(offset, len:uint())
-		subtree:add(f.channel,channel)
-		offset = offset + len:uint()		
- 	end
+		-- Displays message general info in the decoded pane
+		subtree:add(f.msglength,msg_len)
+		subtree:add(f.opcode,opcode)
+		-- Stores the message's type in a string 
+		-- used in the information column
+		msg_type = opcodes[opcode:uint()]
+		
+		if (opcode:uint() == 0) then
+				-- Error packet
+				local errmsg = buffer(offset)
+				offset = pktlen
+				
+				-- displays decoded info
+				msg_tree = subtree:add(hpfeeds, buffer(offset), "Error message")
+				msg_tree:add(f.errmsg,errmsg)
+				
+				
+		elseif (opcode:uint() == 1) then
+				-- Info packet
+				local len = buffer(offset, 1)
+				offset = offset + 1
+				local server = buffer(offset, len:uint())
+				offset = offset + len:uint()
+				local nonce = buffer(offset,4)
+				offset = offset + 4
+				-- displays decoded message info
+				msg_tree = subtree:add(hpfeeds, buffer(offset), "Info message, " .. "Broker: " .. server:string())
+				msg_tree:add(f.server,server)
+				msg_tree:add(f.nonce,nonce)
+						
+		elseif (opcode:uint() == 2) then
+				-- Auth packet
+				local len = buffer(offset, 1)
+				offset = offset + 1
+				local ident = buffer(offset, len:uint())
+				offset = offset + len:uint()
+				local hash = buffer(offset)
+				offset = pktlen
+				
+				-- displays decoded message info
+				msg_tree = subtree:add(hpfeeds, buffer(offset), "Auth message, " .. "Ident: " .. ident:string())
+				msg_tree:add(f.ident,ident)
+				msg_tree:add(f.hash,hash)
+								
+		elseif (opcode:uint() == 3) then
+ 				-- Publish packet
+				local len = buffer(offset, 1)
+				offset = offset + 1
+				local ident = buffer(offset, len:uint())
+				offset = offset + len:uint()
+				len = buffer(offset, 1)
+				offset = offset + 1
+				local channel = buffer(offset, len:uint())
+				offset = offset + len:uint()
+				local payload = buffer(offset)
+				offset = pktlen
+				
+				-- displays decoded message info
+				msg_tree = subtree:add(hpfeeds, buffer(offset), "Publish message, " .. "Ident: " .. ident:string() .. ", Channel: " .. channel:string() )
+				msg_tree:add(f.ident,ident)
+				msg_tree:add(f.channel,channel)
+				msg_tree:add(f.payload,payload)
+							
+		elseif (opcode:uint() == 4) then
+				-- Subscribe packet				 
+				local len = buffer(offset, 1)
+				offset = offset + 1
+				local ident = buffer(offset, len:uint())
+				offset = offset + len:uint()
+				local channel = buffer(offset, ((msg_start + msg_len:uint()) - offset))
+				offset = offset + ((msg_start + msg_len:uint()) - offset)
+				
+				-- displays decoded message info
+				msg_tree = subtree:add(hpfeeds, buffer(offset), "Subscribe message, " .. "Ident: " .. ident:string() .. ", Channel: " .. channel:string() )
+				msg_tree:add(f.ident,ident)
+				msg_tree:add(f.channel,channel)
+							
+		end
+	end
+	
+	-- Do we have enough data to decode the message ?
+	-- if offset is less than msg_len then we don't have enough data
+	-- and we must ask wireshark for more segments
+	if offset < msg_len:uint() then
+			pinfo.desegment_len = msg_len:uint() - offset
+			pinfo.desegment_offset = msg_start
+	end
+	
 	-- Info column display
 	pinfo.cols.info = ("HPfeeds ")
-	pinfo.cols.info:append (opcodes[opcode:uint()] .. " message")
+	pinfo.cols.info:append (msg_type .. " message")
+	
+	
 	
 end
+-- register the dissector
 tcp_table = DissectorTable.get("tcp.port")
 tcp_table:add (10000, hpfeeds)
