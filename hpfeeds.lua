@@ -40,8 +40,11 @@ function hpfeeds.dissector(buffer,pinfo,tree)
 		
 	-- Add an HPfeeds Protocol subtree in the decoded pane
 	local subtree = tree:add (hpfeeds, buffer(), "HPfeeds Protocol ("..buffer:len()..")")
-	local msg_type
-	--pinfo.cols.protocol = "HPfeeds"
+	local info_msg_type
+	local info_error
+	local info_ident
+	local info_chan
+	local info_broker
 	
 	-- pktlen stores the actual buffer size
 	local pktlen = buffer:len()
@@ -72,9 +75,10 @@ function hpfeeds.dissector(buffer,pinfo,tree)
 		-- Displays message general info in the decoded pane
 		subtree:add(f.msglength,msg_len)
 		subtree:add(f.opcode,opcode)
+		
 		-- Stores the message's type in a string 
 		-- used in the information column
-		msg_type = opcodes[opcode:uint()]
+		info_msg_type = opcodes[opcode:uint()]
 		
 		if (opcode:uint() == 0) then
 				-- Error packet
@@ -98,6 +102,8 @@ function hpfeeds.dissector(buffer,pinfo,tree)
 				msg_tree = subtree:add(hpfeeds, buffer(offset), "Info message, " .. "Broker: " .. server:string())
 				msg_tree:add(f.server,server)
 				msg_tree:add(f.nonce,nonce)
+				-- populates information vars
+				info_broker = server:string()
 						
 		elseif (opcode:uint() == 2) then
 				-- Auth packet
@@ -112,6 +118,8 @@ function hpfeeds.dissector(buffer,pinfo,tree)
 				msg_tree = subtree:add(hpfeeds, buffer(offset), "Auth message, " .. "Ident: " .. ident:string())
 				msg_tree:add(f.ident,ident)
 				msg_tree:add(f.hash,hash)
+				-- populates information vars
+				info_ident = ident:string()
 								
 		elseif (opcode:uint() == 3) then
  				-- Publish packet
@@ -131,6 +139,9 @@ function hpfeeds.dissector(buffer,pinfo,tree)
 				msg_tree:add(f.ident,ident)
 				msg_tree:add(f.channel,channel)
 				msg_tree:add(f.payload,payload)
+				-- populates information vars
+				info_ident = ident:string()
+				info_chan = channel:string()
 							
 		elseif (opcode:uint() == 4) then
 				-- Subscribe packet				 
@@ -145,6 +156,9 @@ function hpfeeds.dissector(buffer,pinfo,tree)
 				msg_tree = subtree:add(hpfeeds, buffer(offset), "Subscribe message, " .. "Ident: " .. ident:string() .. ", Channel: " .. channel:string() )
 				msg_tree:add(f.ident,ident)
 				msg_tree:add(f.channel,channel)
+				-- populates information vars
+				info_ident = ident:string()
+				info_chan = channel:string()
 							
 		end
 	end
@@ -159,7 +173,13 @@ function hpfeeds.dissector(buffer,pinfo,tree)
 	
 	-- Info column display
 	pinfo.cols.info = ("HPfeeds ")
-	pinfo.cols.info:append (msg_type .. " message")
+	pinfo.cols.info:append (info_msg_type .. " message")
+	if 		 info_msg_type == "Error" 	  then pinfo.cols.info:append (", Error: " .. info_error)
+	elseif info_msg_type == "Info" 			then pinfo.cols.info:append (", Broker: " .. info_broker)
+	elseif info_msg_type == "Auth" 			then pinfo.cols.info:append (", Ident: " .. info_ident)
+	elseif info_msg_type == "Publish" 	then pinfo.cols.info:append (", Ident: " .. info_ident .. ", Channel: " .. info_chan)
+	elseif info_msg_type == "Subscribe" then pinfo.cols.info:append (", Ident: " .. info_ident .. ", Channel: " .. info_chan)
+	end
 	
 	
 	
