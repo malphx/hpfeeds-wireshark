@@ -19,7 +19,7 @@ Windows:
 
 -== Usage ==-
 
-The dissector register itself for TCP port 10000.
+The dissector registers itself for TCP port 10000.
 If the broker uses another port, for example TCP port 10001, 
 then you can use "decode as" in the wireshark context menu on a packet.
 
